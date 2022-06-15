@@ -73,7 +73,7 @@ align_fastqs <- function(hisat2, samtools, hisat2_genome, hisat2_opts, threads, 
                                    samtools, " fixmate -@ ", as.character(threads), " -O BAM -m ", cell, "_NS.bam ", cell, "_NS_fixmate.bam\n",
                                    samtools, " sort -@ ", as.character(threads), " -O BAM -o ", cell, "_NS_fixmate_CS.bam ", cell, "_NS_fixmate.bam\n",
                                    samtools, " markdup -@ ", as.character(threads), " -O BAM ", cell, "_NS_fixmate_CS.bam ", cell, "_NS_fixmate_CS_dup_marked.bam\n",
-                                   "rm ",cell, ".bam ", cell, "_NS.bam ", cell, "_NS_fixmate.bam ", cell, "_NS_fixmate_CS.bam\n")
+                                   "rm ",cell, ".bam ", cell, ".bam.bai ", cell, "_NS.bam ", cell, "_NS_fixmate.bam ", cell, "_NS_fixmate_CS.bam\n")
         add_aligned_name <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"", cell, "_NS_fixmate_CS_dup_marked.bam\"/9\" ", read_names_file, "\n")
         add_alig_req <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"FALSE\"/8\" ", read_names_file, "\n")
       }
@@ -153,10 +153,8 @@ create_a_matrix_file <- function(read_names_file, intronic_intergenic_tes, targe
   }
   
   colnames(count_matrix) <- c("Geneid", cells)
-  print(count_matrix[1:10,])
   rownames(count_matrix) <- count_matrix$Geneid
   count_matrix <- count_matrix[,2:ncol(count_matrix)]
-  print(count_matrix[1:10,])
   qcstats <- scuttle::perCellQCMetrics(count_matrix) ###### quality control #######
   qcfilter <- scuttle::quickPerCellQC(qcstats)
   count_matrix_filtered <- count_matrix[,!qcfilter$discard]
@@ -203,7 +201,7 @@ log_enrichment <- function(tes_cpm, sample){
     te_cpm <- tes_cpm[,c(cell, "Geneid", "repName", "repClass", "repFamily")]
     te_cpm_grt_1_cpm <- te_cpm[te_cpm[,cell] > 1, ]
     
-    te_cpm_grouped <- te_cpm_grt_1_cpm %>% group_by(repFamily,repClass)
+    te_cpm_grouped <- te_cpm %>% group_by(repFamily,repClass)
     te_cpm_grouped_family_counts <- te_cpm_grouped %>% count(repFamily) 
     te_cpm_grouped_family_counts <- as.data.frame(te_cpm_grouped_family_counts)
     
@@ -216,8 +214,8 @@ log_enrichment <- function(tes_cpm, sample){
     
     te_cpm_grt_lst_1_grouped_family_counts <- rbind(te_cpm_grt_1_grouped_family_counts, te_cpm_lst_1_grouped_family_counts)
     
-    te_cpm_grt_lst_1_grouped_family_counts$enrich_numerator <- (te_cpm_grt_lst_1_grouped_family_counts$n)/sum(te_cpm_grt_lst_1_grouped_family_counts$n)
-    te_cpm_grouped_family_counts$enrich_denominator <- (te_cpm_grouped_family_counts$n)/sum(te_cpm_grouped_family_counts$n)
+    te_cpm_grt_lst_1_grouped_family_counts$enrich_numerator <- (te_cpm_grt_lst_1_grouped_family_counts$n)/sum(te_cpm_grt_lst_1_grouped_family_counts$n) + 0.01
+    te_cpm_grouped_family_counts$enrich_denominator <- (te_cpm_grouped_family_counts$n)/sum(te_cpm_grouped_family_counts$n) + 0.01
     
     te_enrichment <- inner_join(te_cpm_grt_lst_1_grouped_family_counts, te_cpm_grouped_family_counts, by="repFamily")
     te_enrichment$enrichment <- (te_enrichment$enrich_numerator)/(te_enrichment$enrich_denominator)
@@ -254,14 +252,20 @@ quantify_TEs <- function(config_file, read_names_file, sample, target_dir, creat
   threads <- configs[configs$option == "threads", 2]
   
   trim_reads(trim_galore, cutadapt, trim_opts, read_names_file, target_dir)
-  print(hisat2_opts)
   align_fastqs(hisat2, samtools, hisat2_genome, hisat2_opts, threads, read_names_file, target_dir)
   count_features(featureCounts, feature_annotation_file, threads, read_names_file, target_dir)
   
   if (create_count_matrix == "TRUE"){
     tes_cpm <- create_a_matrix_file(read_names_file, intronic_intergenic_tes, target_dir)
   }
-  if (log_enrich == "TRUE"){
-    return(log_enrichment(tes_cpm, sample))
+  if ((log_enrich == "TRUE") & (create_count_matrix == "TRUE")){
+    enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
   }
+  if ((log_enrich == "TRUE") & (create_count_matrix != "TRUE")){
+    tes_cpm <- fread(paste0(target_dir, "/count_matrix_filtered_cpm_TE.tsv"), header = TRUE) %>% as.data.frame()
+    enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
+  }
+  fwrite(enrich_out %>% as.data.frame(),
+         file=paste0(target_dir, "/log_enrichment.tsv"),
+         quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
 }
