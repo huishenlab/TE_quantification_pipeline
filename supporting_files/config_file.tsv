@@ -1,0 +1,15 @@
+option	input
+feature_annotation_file	/Volumes/projects/shen/projects/2022_08_01_Josh_Ben_Ayush_STORM_TE_project/CHM13_analysis/supporting_files/pc_te_chrM.saf
+intronic_intergenic_tes	/Volumes/projects/shen/projects/2022_08_01_Josh_Ben_Ayush_STORM_TE_project/CHM13_analysis/supporting_files/intergenic_intronic_tes.txt
+trim	FALSE
+trim_galore	/varidata/research/projects/shen/tools/ayush/miniconda3/bin/trim_galore
+cutadapt	/varidata/research/projects/shen/tools/ayush/miniconda3/bin/cutadapt
+trim_opts	 --illumina --trim-n -length 36 --clip_R2 3 --fastqc --cores 
+align	TRUE
+hisat2	/varidata/research/projects/shen/tools/ayush/hisat2-2.2.1/hisat2
+samtools	/varidata/research/projects/shen/tools/ayush/miniconda3/bin/samtools
+hisat2_genome	/varidata/research/projects/shen/references/HISAT2/CHM13/GCA_009914755.4-hisat2/GCA_009914755.4.chrNames
+hisat2_opts	 --dta
+fc	TRUE
+featureCounts	/varidata/research/projects/shen/tools/ayush/miniconda3/bin/featureCounts
+threads	32
