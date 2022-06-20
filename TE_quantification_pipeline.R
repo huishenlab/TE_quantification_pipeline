@@ -16,7 +16,6 @@ trim_reads <- function(trim_galore, cutadapt, trim_opts, read_names_file, target
   paired <- read_names$paired
   raw_reads_1 <- read_names$raw_reads_1
   raw_reads_2 <- read_names$raw_reads_2
-  
   mk_trimmed_dir <- paste0("mkdir -p ", target_dir, "/trimmed_fastq_files","\n")
   
   for (i in 1:length(cells)){
@@ -24,20 +23,20 @@ trim_reads <- function(trim_galore, cutadapt, trim_opts, read_names_file, target
     
     if (trim[i] == "TRUE"){
       if (paired[i] == "TRUE"){
-        trim_reads <- paste0(trim_galore, trim_opts, " --cores 4",
-                             " --path_to_cutadapt ", cutadapt , " --basename ", cell,"_ -o ", target_dir, "/trimmed_fastq_files",
+        trim_reads <- paste0(trim_galore, " ", trim_opts,
+                             " --path_to_cutadapt ", cutadapt , " --basename ", cell," -o ", target_dir, "/trimmed_fastq_files",
                              " --paired ",  target_dir, "/raw_fastq_files", "/", raw_reads_1[i], " ",  target_dir, "/raw_fastq_files", "/", raw_reads_2[i], "\n")
         add_trimmed_name <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"", cell, "_val_1.fq.gz\"/6\" ", read_names_file, "\n")
-        add_trimmed_name <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"", cell, "_val_2.fq.gz\"/7\" ", read_names_file, "\n")
+        add_trimmed_name <- paste0(add_trimmed_name, "\nsed -Ei \"", as.character(i + 1), " s/[^\t]*/\"", cell, "_val_2.fq.gz\"/7\" ", read_names_file, "\n")
         add_trim_req <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"FALSE\"/5\" ", read_names_file, "\n")
         }
       else {
-        trim_reads <- paste0(trim_galore, trim_opts, " --cores 4",
-                             " --path_to_cutadapt ", cutadapt , " --basename ", cell,"_ -o ", target_dir, "/trimmed_fastq_files", " ",
+        trim_reads <- paste0(trim_galore, " ", trim_opts,
+                             " --path_to_cutadapt ", cutadapt , " --basename ", cell," -o ", target_dir, "/trimmed_fastq_files", " ",
                              target_dir, "/raw_fastq_files", "/", raw_reads_1[i], "\n")
         add_trimmed_name <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"", cell, "_trimmed.fq.gz\"/6\" ", read_names_file, "\n")
         add_trim_req <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"FALSE\"/5\" ", read_names_file, "\n")
-        }
+      }
       system(paste0("set -e\n", mk_trimmed_dir, trim_reads, add_trimmed_name, add_trim_req))
     }
   }
@@ -137,45 +136,56 @@ create_a_matrix_file <- function(read_names_file, intronic_intergenic_tes, targe
   fc_output_dir <- paste0(target_dir, "/featureCounts")
   fc_files <- read_names$fc_files
   cells <- read_names$cells
+  single_cell <- read_names$sc
   
   for (i in 1:length(cells)){
     cell <- cells[i]
-    feat_counts_file <- fread(paste0(fc_output_dir, "/", fc_files[i]), select = c(1,7), 
-                              nThread = 6) %>% as.data.frame()
     
-    names(feat_counts_file)[ncol(feat_counts_file)] <- cell
     if (i == 1){
-      count_matrix <- data.frame(feat_counts_file[, "Geneid"], feat_counts_file[, cell])
+      feat_counts_file <- fread(paste0(fc_output_dir, "/", fc_files[i]), select = c(1,7), 
+                                nThread = 6)
+      names(feat_counts_file)[ncol(feat_counts_file)] <- cell
+      count_matrix <- feat_counts_file
     }
     else {
+      feat_counts_file <- fread(paste0(fc_output_dir, "/", fc_files[i]), select = c(7), 
+                                nThread = 6)
+      names(feat_counts_file)[ncol(feat_counts_file)] <- cell
       count_matrix[, cell] <- feat_counts_file[, cell]
     }
   }
   
-  colnames(count_matrix) <- c("Geneid", cells)
-  rownames(count_matrix) <- count_matrix$Geneid
-  count_matrix <- count_matrix[,2:ncol(count_matrix)]
-  qcstats <- scuttle::perCellQCMetrics(count_matrix) ###### quality control #######
-  qcfilter <- scuttle::quickPerCellQC(qcstats)
-  count_matrix_filtered <- count_matrix[,!qcfilter$discard]
+  Geneids <- count_matrix$Geneid
   
+  colnames(count_matrix) <- c("Geneid", cells)
   fwrite(count_matrix %>% as.data.frame(),
          file=paste0(target_dir, "/count_matrix.tsv"),
-         quote=FALSE, sep='\t', col.names = TRUE, row.names = TRUE)
+         quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
   
-  fwrite(count_matrix_filtered %>% as.data.frame(),
-         file=paste0(target_dir, "/count_matrix_filtered.tsv"),
-         quote=FALSE, sep='\t', col.names = TRUE, row.names = TRUE)
+  count_matrix <- count_matrix[,2:ncol(count_matrix)]
   
-  intergenic_intronic_tes_df <- fread(intronic_intergenic_tes) %>% as.data.frame()  ####### extracting TE's ########
+  if (single_cell == "TRUE"){
+    qcstats <- scuttle::perCellQCMetrics(count_matrix) ###### quality control #######
+    qcfilter <- scuttle::quickPerCellQC(qcstats)
+    count_matrix_filtered <- count_matrix[,!qcfilter$discard]
+    
+    fwrite(cbind(count_matrix_filtered, Geneids) %>% as.data.frame(),
+           file=paste0(target_dir, "/count_matrix_filtered.tsv"),
+           quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
+  }
+  else {
+    count_matrix_filtered <- count_matrix
+  }
+  
+  intergenic_intronic_tes_df <- fread(intronic_intergenic_tes)  ####### extracting TE's ########
   colnames(intergenic_intronic_tes_df) <- gsub(colnames(intergenic_intronic_tes_df)[length(colnames(intergenic_intronic_tes_df)) - 1], "Geneid", colnames(intergenic_intronic_tes_df))
   
-  count_matrix_filtered$Geneid <- rownames(count_matrix_filtered)
+  count_matrix_filtered$Geneid <- Geneids
   count_matrix_filtered_TE <- inner_join(count_matrix_filtered, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
   
   count_matrix_filtered <- count_matrix_filtered[, 1:(ncol(count_matrix_filtered)-1)]
   count_matrix_filtered_cpm <- sweep(count_matrix_filtered, 2, colSums(count_matrix_filtered)/1000000, `/`)
-  count_matrix_filtered_cpm$Geneid <- rownames(count_matrix_filtered_cpm)
+  count_matrix_filtered_cpm$Geneid <- Geneids
   
   count_matrix_filtered_cpm_TE <- inner_join(count_matrix_filtered_cpm, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
   
@@ -258,14 +268,17 @@ quantify_TEs <- function(config_file, read_names_file, sample, target_dir, creat
   if (create_count_matrix == "TRUE"){
     tes_cpm <- create_a_matrix_file(read_names_file, intronic_intergenic_tes, target_dir)
   }
-  if ((log_enrich == "TRUE") & (create_count_matrix == "TRUE")){
-    enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
+  
+  if (log_enrich == "TRUE"){
+    if (create_count_matrix == "TRUE"){
+      enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
+    }
+    if (create_count_matrix == "FALSE"){
+      tes_cpm <- fread(paste0(target_dir, "/count_matrix_filtered_cpm_TE.tsv"), header = TRUE) %>% as.data.frame()
+      enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
+    }
+    fwrite(enrich_out %>% as.data.frame(),
+           file=paste0(target_dir, "/log_enrichment.tsv"),
+           quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
   }
-  if ((log_enrich == "TRUE") & (create_count_matrix != "TRUE")){
-    tes_cpm <- fread(paste0(target_dir, "/count_matrix_filtered_cpm_TE.tsv"), header = TRUE) %>% as.data.frame()
-    enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
-  }
-  fwrite(enrich_out %>% as.data.frame(),
-         file=paste0(target_dir, "/log_enrichment.tsv"),
-         quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
 }
