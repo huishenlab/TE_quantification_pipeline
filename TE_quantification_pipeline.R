@@ -81,7 +81,7 @@ align_fastqs <- function(hisat2, samtools, hisat2_genome, hisat2_opts, threads, 
                                    trimmed_fastq_dir, "/" , trimmed_reads_1[i], " -p ", as.character(threads), " | ", 
                                    samtools, " sort -@ ", as.character(threads), " -O BAM -o ", cell, ".bam ) > ", cell,"_alignment.log 2>&1\n",
                                    samtools, " index ", cell, ".bam\n")
-        add_aligned_name <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"", cell, "_NS_fixmate_CS_dup_marked.bam\"/9\" ", read_names_file, "\n")
+        add_aligned_name <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"", cell, ".bam\"/9\" ", read_names_file, "\n")
         add_alig_req <- paste0("sed -Ei \"", as.character(i + 1), " s/[^\t]*/\"FALSE\"/8\" ", read_names_file, "\n")
       }
       system(paste0("set -e\n", mk_aligned_dir, cd_to_aligned_dir, hisat2_alignment,
@@ -130,7 +130,7 @@ count_features <- function(feature_counts, feature_annotation_file, threads, rea
 
 ###################################### function to create count matrix ###########################################
 
-create_a_matrix_file <- function(read_names_file, intronic_intergenic_tes, target_dir){
+create_a_matrix_file <- function(read_names_file, intronic_intergenic_tes, target_dir, scuttle_filter){
   
   read_names <- fread(read_names_file, header = TRUE) %>% as.data.frame()
   fc_output_dir <- paste0(target_dir, "/featureCounts")
@@ -151,7 +151,7 @@ create_a_matrix_file <- function(read_names_file, intronic_intergenic_tes, targe
       feat_counts_file <- fread(paste0(fc_output_dir, "/", fc_files[i]), select = c(7), 
                                 nThread = 6)
       names(feat_counts_file)[ncol(feat_counts_file)] <- cell
-      count_matrix[, cell] <- feat_counts_file[, cell]
+      count_matrix[, cell] <- feat_counts_file[, ..cell]
     }
   }
   
@@ -164,41 +164,50 @@ create_a_matrix_file <- function(read_names_file, intronic_intergenic_tes, targe
   
   count_matrix <- count_matrix[,2:ncol(count_matrix)]
   
-  if (single_cell == "TRUE"){
-    qcstats <- scuttle::perCellQCMetrics(count_matrix) ###### quality control #######
-    qcfilter <- scuttle::quickPerCellQC(qcstats)
-    count_matrix_filtered <- count_matrix[,!qcfilter$discard]
-    
-    fwrite(cbind(count_matrix_filtered, Geneids) %>% as.data.frame(),
-           file=paste0(target_dir, "/count_matrix_filtered.tsv"),
-           quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
-  }
-  else {
-    count_matrix_filtered <- count_matrix
-  }
-  
   intergenic_intronic_tes_df <- fread(intronic_intergenic_tes)  ####### extracting TE's ########
   colnames(intergenic_intronic_tes_df) <- gsub(colnames(intergenic_intronic_tes_df)[length(colnames(intergenic_intronic_tes_df)) - 1], "Geneid", colnames(intergenic_intronic_tes_df))
   
-  count_matrix_filtered$Geneid <- Geneids
-  count_matrix_filtered_TE <- inner_join(count_matrix_filtered, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
+  count_matrix$Geneid <- Geneids
+  count_matrix_TE <- inner_join(count_matrix, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
   
-  count_matrix_filtered <- count_matrix_filtered[, 1:(ncol(count_matrix_filtered)-1)]
-  count_matrix_filtered_cpm <- sweep(count_matrix_filtered, 2, colSums(count_matrix_filtered)/1000000, `/`)
-  count_matrix_filtered_cpm$Geneid <- Geneids
+  count_matrix <- count_matrix[, 1:(ncol(count_matrix)-1)]
+  count_matrix_cpm <- sweep(count_matrix, 2, colSums(count_matrix)/1000000, `/`)
+  count_matrix_cpm$Geneid <- Geneids
   
-  count_matrix_filtered_cpm_TE <- inner_join(count_matrix_filtered_cpm, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
+  count_matrix_cpm_TE <- inner_join(count_matrix_cpm, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
   
-  fwrite(count_matrix_filtered_TE %>% as.data.frame(),
-         file=paste0(target_dir, "/count_matrix_filtered_TE.tsv"),
+  fwrite(count_matrix_TE %>% as.data.frame(),
+         file=paste0(target_dir, "/count_matrix_TE.tsv"),
          quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
   
-  fwrite(count_matrix_filtered_cpm_TE %>% as.data.frame(),
-         file=paste0(target_dir, "/count_matrix_filtered_cpm_TE.tsv"),
+  fwrite(count_matrix_cpm_TE %>% as.data.frame(),
+         file=paste0(target_dir, "/count_matrix_cpm_TE.tsv"),
          quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
   
-  return(count_matrix_filtered_cpm_TE)
-  
+  if (single_cell == "TRUE"){
+    if (scuttle_filter == "TRUE"){
+      qcstats <- scuttle::perCellQCMetrics(count_matrix) ###### quality control #######
+      qcfilter <- scuttle::quickPerCellQC(qcstats)
+      count_matrix_filtered <- count_matrix[,!qcfilter$discard, with=FALSE]
+      
+      count_matrix_filtered$Geneid <- Geneids
+      count_matrix_filtered_TE <- inner_join(count_matrix_filtered, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
+      
+      count_matrix_filtered <- count_matrix_filtered[, 1:(ncol(count_matrix_filtered)-1)]
+      count_matrix_filtered_cpm <- sweep(count_matrix_filtered, 2, colSums(count_matrix_filtered)/1000000, `/`)
+      count_matrix_filtered_cpm$Geneid <- Geneids
+      
+      count_matrix_filtered_cpm_TE <- inner_join(count_matrix_filtered_cpm, intergenic_intronic_tes_df[,c(6,7,8,9)], by = "Geneid")
+    }
+    
+    fwrite(count_matrix_filtered_TE %>% as.data.frame(),
+           file=paste0(target_dir, "/count_matrix_filtered_TE.tsv"),
+           quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
+    
+    fwrite(count_matrix_filtered_cpm_TE %>% as.data.frame(),
+           file=paste0(target_dir, "/count_matrix_filtered_cpm_TE.tsv"),
+           quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
+  }
 }
 
 ########################################### function to calculate enrichment ###################################################
@@ -212,11 +221,11 @@ log_enrichment <- function(tes_cpm, sample){
     te_cpm_grt_1_cpm <- te_cpm[te_cpm[,cell] > 1, ]
     
     te_cpm_grouped <- te_cpm %>% group_by(repFamily,repClass)
-    te_cpm_grouped_family_counts <- te_cpm_grouped %>% count(repFamily) 
+    te_cpm_grouped_family_counts <- te_cpm_grouped %>% dplyr::count(repFamily) 
     te_cpm_grouped_family_counts <- as.data.frame(te_cpm_grouped_family_counts)
     
     te_cpm_grt_1_grouped <- te_cpm_grt_1_cpm %>% group_by(repFamily,repClass)
-    te_cpm_grt_1_grouped_family_counts <- te_cpm_grt_1_grouped %>% count(repFamily) 
+    te_cpm_grt_1_grouped_family_counts <- te_cpm_grt_1_grouped %>% dplyr::count(repFamily) 
     te_cpm_grt_1_grouped_family_counts <- as.data.frame(te_cpm_grt_1_grouped_family_counts)
     
     te_cpm_lst_1_grouped_family_counts <- te_cpm_grouped_family_counts[!te_cpm_grouped_family_counts$repFamily %in% te_cpm_grt_1_grouped_family_counts$repFamily,]
@@ -224,8 +233,8 @@ log_enrichment <- function(tes_cpm, sample){
     
     te_cpm_grt_lst_1_grouped_family_counts <- rbind(te_cpm_grt_1_grouped_family_counts, te_cpm_lst_1_grouped_family_counts)
     
-    te_cpm_grt_lst_1_grouped_family_counts$enrich_numerator <- (te_cpm_grt_lst_1_grouped_family_counts$n)/sum(te_cpm_grt_lst_1_grouped_family_counts$n) + 0.01
-    te_cpm_grouped_family_counts$enrich_denominator <- (te_cpm_grouped_family_counts$n)/sum(te_cpm_grouped_family_counts$n) + 0.01
+    te_cpm_grt_lst_1_grouped_family_counts$enrich_numerator <- (te_cpm_grt_lst_1_grouped_family_counts$n)/sum(te_cpm_grt_lst_1_grouped_family_counts$n)
+    te_cpm_grouped_family_counts$enrich_denominator <- (te_cpm_grouped_family_counts$n)/sum(te_cpm_grouped_family_counts$n)
     
     te_enrichment <- inner_join(te_cpm_grt_lst_1_grouped_family_counts, te_cpm_grouped_family_counts, by="repFamily")
     te_enrichment$enrichment <- (te_enrichment$enrich_numerator)/(te_enrichment$enrich_denominator)
@@ -245,7 +254,7 @@ log_enrichment <- function(tes_cpm, sample){
 
 ################################################## input to output ##############################################################
 
-quantify_TEs <- function(config_file, read_names_file, sample, target_dir, create_count_matrix, log_enrich){
+quantify_TEs <- function(config_file, read_names_file, sample, target_dir, create_count_matrix, scuttle_filter, log_enrich){
   
   configs <- fread(config_file, header = TRUE) %>% as.data.frame()
   
@@ -266,19 +275,22 @@ quantify_TEs <- function(config_file, read_names_file, sample, target_dir, creat
   count_features(featureCounts, feature_annotation_file, threads, read_names_file, target_dir)
   
   if (create_count_matrix == "TRUE"){
-    tes_cpm <- create_a_matrix_file(read_names_file, intronic_intergenic_tes, target_dir)
+    create_a_matrix_file(read_names_file, intronic_intergenic_tes, target_dir, scuttle_filter)
   }
   
   if (log_enrich == "TRUE"){
-    if (create_count_matrix == "TRUE"){
-      enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
-    }
-    if (create_count_matrix == "FALSE"){
-      tes_cpm <- fread(paste0(target_dir, "/count_matrix_filtered_cpm_TE.tsv"), header = TRUE) %>% as.data.frame()
-      enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
-    }
+    tes_cpm <- fread(paste0(target_dir, "/count_matrix_cpm_TE.tsv"), header = TRUE) %>% as.data.frame()
+    enrich_out <- log_enrichment(tes_cpm, sample) %>% as.data.frame()
     fwrite(enrich_out %>% as.data.frame(),
            file=paste0(target_dir, "/log_enrichment.tsv"),
            quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
+    
+    if (scuttle_filter == "TRUE"){
+      filtered_tes_cpm <- fread(paste0(target_dir, "/count_matrix_filtered_cpm_TE.tsv"), header = TRUE) %>% as.data.frame()
+      filtered_enrich_out <- log_enrichment(filtered_tes_cpm, sample) %>% as.data.frame()
+      fwrite(filtered_enrich_out %>% as.data.frame(),
+             file=paste0(target_dir, "/filtered_log_enrichment.tsv"),
+             quote=FALSE, sep='\t', col.names = TRUE, row.names = FALSE)
+    }
   }
 }
