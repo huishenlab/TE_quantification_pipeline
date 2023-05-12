@@ -34,7 +34,7 @@ The current version of the pipeline is designed to be used with CHM13 v2.0 assem
 5) counts per millions for only intergenic and intronic TEs matrix is used for the log enrichment calculation of TE's
 6) Enrichment score is calculated as per the folloing formula.
 
-$$ enrichment score = {{{Number of TE subfamilies > 1cpm} \over {Number of TEs > 1cpm}} \over {{Number of TE subfamilies} \over {Number of TEs}}} $$
+$$ enrichment\ score = {{{Number\ of\ TE\ subfamilies\ >\ 1cpm} \over {Number\ of\ TEs\ >\ 1cpm}} \over {{Number\ of\ TE\ subfamilies} \over {Number\ of\ TEs}}} $$
 
 # How to use the pipeline
 
