@@ -1,3 +1,3 @@
-cells	paired	raw_reads_1	raw_reads_2	trim	trimmed_reads_1	trimmed_reads_2	align	aligned_files	fc	fc_files
-B1	TRUE	NULL	NULL	FALSE	dac12_k562_B1_L000_R1_001_val_1.fq.gz	dac12_k562_B1_L000_R2_001_val_2.fq.gz	FALSE	B1_NS_fixmate_CS_dup_marked.bam	FALSE	B1_fc
-B2	TRUE	NULL	NULL	FALSE	dac12_k562_B2_L000_R1_001_val_1.fq.gz	dac12_k562_B2_L000_R2_001_val_2.fq.gz	FALSE	B2_NS_fixmate_CS_dup_marked.bam	FALSE	B2_fc
+cells	paired	raw_reads_1	raw_reads_2	trim	trimmed_reads_1	trimmed_reads_2	align	aligned_files	fc	fc_files  sc
+B1	TRUE	NULL	NULL	FALSE	dac12_k562_B1_L000_R1_001_val_1.fq.gz	dac12_k562_B1_L000_R2_001_val_2.fq.gz	FALSE	B1_NS_fixmate_CS_dup_marked.bam	FALSE	B1_fc TRUE
+B2	TRUE	NULL	NULL	FALSE	dac12_k562_B2_L000_R1_001_val_1.fq.gz	dac12_k562_B2_L000_R2_001_val_2.fq.gz	FALSE	B2_NS_fixmate_CS_dup_marked.bam	FALSE	B2_fc TRUE
