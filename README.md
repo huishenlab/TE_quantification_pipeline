@@ -32,6 +32,9 @@ The current version of the pipeline is designed to be used with CHM13 v2.0 assem
 3) The duplicate marked bam files are used to count reads in each of the featues (genes and TE's) in the pc_te_chrM.saf file using featureCounts and options "--fracOverlap 0.1 -M -s 0 --fraction". 
 4) feature counts files for all the cells is then used to build combined raw count, counts per million, raw count for only intergenic and intronic TEs and counts per millions for only intergenic and intronic TEs matrices. 
 5) counts per millions for only intergenic and intronic TEs matrix is used for the log enrichment calculation of TE's
+6) Enrichment score is calculated as per the folloing formula.
+7) 
+enrichment score=((Number of TE subfamilies>1cpm)/(Number of TEs>1cpm))/((Number of TE subfamilies)/(Number of TEs))
 
 # How to use the pipeline
 
